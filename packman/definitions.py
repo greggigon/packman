@@ -28,6 +28,7 @@ PARAM_KEY_FILES_PATH = 'key_files'  # an optional 'string' representing a key to
 PARAM_REQS = 'reqs'  # an optional [list] of requirements to download from the local distributions repos
 PARAM_PREREQS = 'prereqs'  # an optional [list] of prerequirements to install from before retrieving the sources or packgaging
 PARAM_KEEP_SOURCES = 'keep_sources'  # an optional 'bool' representing whether to keep the retrieved sources after packaging
+PARAM_USE_SUDO = 'use_sudo'
 
 # packman configuration files generation params
 PARAM_CONFIG_TEMPLATE_DIR = '__template_dir'  # an optional 'dict' containing config for generating config files from a templates directory

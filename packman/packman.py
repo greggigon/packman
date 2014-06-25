@@ -330,6 +330,7 @@ def get(component):
     gems = c.get(defs.PARAM_GEMS, [])
     dst_path = c.get(defs.PARAM_SOURCES_PATH, False)
     overwrite = c.get(defs.PARAM_OVERWRITE_SOURCES, True)
+    use_sudo = c.get(defs.PARAM_USE_SUDO, False)
 
     common = CommonHandler()
     if centos:
@@ -344,14 +345,14 @@ def get(component):
     if overwrite:
         lgr.info('overwrite enabled. removing {0} before retrieval'.format(
             dst_path))
-        common.rmdir(dst_path)
+        common.rmdir(dst_path, use_sudo)
     else:
         if common.is_dir(dst_path):
             lgr.error('the destination directory for this package already '
                       'exists and overwrite is disabled.')
     # create the directories required for package creation...
     if not common.is_dir(dst_path):
-        common.mkdir(dst_path)
+        common.mkdir(dst_path, use_sudo)
 
     # TODO: (TEST) raise on "command not supported by distro"
     # TODO: (FEAT) add support for building packages from source
@@ -365,7 +366,7 @@ def get(component):
                 get_distro()))
         repo_handler.add_ppa_repos(source_ppas)
     # get a key for the repo if it's required..
-    dl_handler.downloads(source_keys, dir=dst_path)
+    dl_handler.downloads(source_keys, dir=dst_path, sudo=use_sudo)
     for key in source_keys:
         key_file = urllib2.unquote(key).decode('utf8').split('/')[-1]
         repo_handler.add_key(os.path.join(dst_path, key_file))
@@ -382,9 +383,9 @@ def get(component):
             #     path, name = os.path.split(file)
             #     file = path + '/archives/' + file
             dl_handler.download(source_url, dir=os.path.join(
-                dst_path, 'archives'))
+                dst_path, 'archives'), sudo=use_sudo)
         else:
-            dl_handler.download(source_url, dir=dst_path)
+            dl_handler.download(source_url, dir=dst_path, sudo=use_sudo)
     # add the repo key
     if key_files:
         repo_handler.add_keys(key_files)
@@ -393,13 +394,13 @@ def get(component):
     for req in reqs:
         if type(req) is dict:
             home = os.path.expanduser('~')
-            common.mkdir('{}/tmp'.format(home), sudo=False)
+            common.mkdir('{}/tmp'.format(home), sudo=use_sudo)
             dl_handler.download(
                 req['url'], file='{0}/tmp/{1}_reqs.tar.gz'.format(
-                    home, name), sudo=False)
+                    home, name), sudo=use_sudo)
             common.untar('{0}/tmp'.format(home),
                          '{0}/tmp/{1}_reqs.tar.gz'.format(
-                             home, name), strip=0, sudo=False)
+                             home, name), strip=0, sudo=use_sudo)
             cf = glob.glob('{}/tmp/packages.py'.format(home))
             if not cf:
                 cf = glob.glob('{}/tmp/**/packages.py'.format(home))
@@ -416,7 +417,7 @@ def get(component):
                 # get(c)
                 # pack(c)
         else:
-            repo_handler.downloads(reqs, dst_path)
+            repo_handler.downloads(reqs, dst_path, use_sudo)
     # download relevant python modules...
     py_handler.get_python_modules(modules, dst_path)
     # download relevant ruby gems...
@@ -475,6 +476,7 @@ def pack(component):
         if defs.PARAM_BOOTSTRAP_SCRIPT_IN_PACKAGE_PATH in c else False
     src_pkg_type = c.get(defs.PARAM_SOURCE_PACKAGE_TYPE, False)
     dst_pkg_types = c.get(defs.PARAM_DESTINATION_PACKAGE_TYPES, [])
+    use_sudo = c.get(defs.PARAM_USE_SUDO, False)
     # identifies pkg type automatically if not specified explicitly
     if not dst_pkg_types:
         lgr.debug('destination package type ommitted')
@@ -502,7 +504,7 @@ def pack(component):
 
     # if the package_path doesn't exist, create it
     if not common.is_dir(os.path.join(package_path, 'archives')):
-        common.mkdir(os.path.join(package_path, 'archives'))
+        common.mkdir(os.path.join(package_path, 'archives'), use_sudo)
     # can't use sources_path == tmp_pkg_path for the package... duh!
     if sources_path == tmp_pkg_path:
         lgr.error('source and destination paths must'
@@ -511,17 +513,17 @@ def pack(component):
     if overwrite:
         lgr.info('overwrite enabled. removing {0}/{1}* before packaging'
                  .format(package_path, name))
-        common.rm('{0}/{1}*'.format(package_path, name))
+        common.rm('{0}/{1}*'.format(package_path, name), use_sudo)
     # if a package is supported to be created, cleanup prior to creation
     # TODO: (CHK) why did I do this?
     if src_pkg_type:
-        common.rmdir(tmp_pkg_path)
-        common.mkdir(tmp_pkg_path)
+        common.rmdir(tmp_pkg_path, use_sudo)
+        common.mkdir(tmp_pkg_path, use_sudo)
 
     lgr.info('generating package scripts and config files...')
     # if there are configuration templates to generate configs from...
     if config_templates:
-        tmp_handler.generate_configs(c)
+        tmp_handler.generate_configs(c, use_sudo)
     # if bootstrap scripts are required, generate them.
     if bootstrap_script or bootstrap_script_in_pkg:
         # bootstrap_script - bootstrap script to be attached to the package
@@ -535,9 +537,9 @@ def pack(component):
             # if it's in_pkg, grant it exec permissions and copy it to the
             # package's path.
             lgr.debug('granting execution permissions')
-            do('chmod +x {0}'.format(bootstrap_script_in_pkg))
+            do('chmod +x {0}'.format(bootstrap_script_in_pkg), sudo=use_sudo)
             lgr.debug('copying bootstrap script to package directory')
-            common.cp(bootstrap_script_in_pkg, sources_path)
+            common.cp(bootstrap_script_in_pkg, sources_path, sudo=use_sudo)
     lgr.info('packing up component: {0}'.format(name))
     # this checks if a package needs to be created. If no source package type
     # is supplied, the assumption is that packages are only being downloaded
@@ -555,7 +557,7 @@ def pack(component):
                 # fpm with the relevant flags.
                 for dst_pkg_type in dst_pkg_types:
                     i = fpmHandler(name, src_pkg_type, dst_pkg_type,
-                                   sources_path, sudo=True)
+                                   sources_path, sudo=use_sudo)
                     i.fpm(version=version, force=overwrite, depends=depends,
                           after_install=bootstrap_script, chdir=False,
                           before_install=None)
@@ -564,7 +566,7 @@ def pack(component):
                         do('sudo gzip {0}.tar*'.format(name))
                     lgr.info("isolating archives...")
                     common.mv('{0}/*.{1}'.format(
-                        tmp_pkg_path, dst_pkg_type), package_path)
+                        tmp_pkg_path, dst_pkg_type), package_path, use_sudo)
         # apparently, the src for creation the package doesn't exist...
         # what can you do?
         else:
@@ -578,11 +580,11 @@ def pack(component):
         lgr.info("isolating archives...")
         for dst_pkg_type in dst_pkg_types:
             common.mv('{0}/*.{1}'.format(
-                tmp_pkg_path, dst_pkg_type), package_path)
+                tmp_pkg_path, dst_pkg_type), package_path, use_sudo)
     lgr.info('package creation completed successfully!')
     if not keep_sources:
         lgr.debug('removing sources...')
-        common.rmdir(sources_path)
+        common.rmdir(sources_path, use_sudo)
 
 
 def do(command, attempts=2, sleep_time=3, accepted_err_codes=None,
@@ -941,36 +943,25 @@ class YumHandler(CommonHandler):
             lgr.error('{0} is not installed'.format(package))
             return False
 
-    def downloads(self, reqs, sources_path):
+    def downloads(self, reqs, sources_path, sudo=False):
         """downloads component requirements
 
         :param list reqs: list of requirements to download
         :param sources_path: path to download requirements to
         """
         for req in reqs:
-            self.download(req, sources_path)
+            self.download(req, sources_path, sudo)
 
-    def download(self, package, dir, enable_repo=False):
+    def download(self, package, dir, enable_repo=False, sudo=False):
         """uses yum to download package debs from ubuntu's repo
 
         :param string package: package to download
         :param string dir: dir to download to
         """
-        # TODO: (TEST) run yum reinstall instead of yum install.
         lgr.debug('downloading {0} to {1}'.format(package, dir))
-        # TODO: (FIX) yum download exits with an error even if the download
-        # TODO: (FIX) succeeded due to a non-zero error message.
-        # TODO: (FEAT) add yum enable-repo option
-        # TODO: (IMPRV) $(repoquery --requires --recursive --resolve pkg)
-        # TODO: (IMPRV) can be used to download deps. test to see if it works.
-        # if self.check_if_package_is_installed(package):
-        # return do('sudo yum -y reinstall --downloadonly '
-        #           '--downloaddir={1}/archives {0}'.format(
-        #               package, dir), accepted_err_codes=[1])
-        # else:
-        return do('sudo yum -y install --downloadonly '
-                  '--downloaddir={1}/archives {0}'.format(
-                      package, dir), accepted_err_codes=[1])
+
+        return do('yumdownloader --destdir={1}/archives -v {0}'.format(package, dir),
+                  accepted_err_codes=[1], sudo=sudo)
 
     def installs(self, packages):
         """yum installs a list of packages
@@ -1202,9 +1193,9 @@ class WgetHandler(CommonHandler):
             raise PackagerError('please specify either a directory'
                                 ' or file to download to.')
         lgr.debug('downloading {0} to {1}'.format(url, file or dir))
-        return do('wget {0} {1} -O {2}'.format(
+        return do('wget --no-check-certificate {0} {1} -O {2}'.format(
             url, options, file), sudo=sudo) \
-            if file else do('wget {0} {1} -P {2}'
+            if file else do('wget --no-check-certificate {0} {1} -P {2}'
                             .format(url, options, dir), sudo=sudo)
 
 

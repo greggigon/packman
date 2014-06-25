@@ -62,7 +62,7 @@ setup(
     license='LICENSE',
     platforms='Ubuntu',
     description='Package Generator',
-    long_description=read('README.rst'),
+    long_description='My description is shorter than yours',
     packages=['packman'],
     entry_points={
         'console_scripts': [
