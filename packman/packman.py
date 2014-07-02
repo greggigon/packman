@@ -537,9 +537,9 @@ def pack(component):
                                                bootstrap_template)
             # if it's in_pkg, grant it exec permissions and copy it to the
             # package's path.
-            lgr.debug('granting execution permissions')
+            lgr.info('granting execution permissions')
             do('chmod +x {0}'.format(bootstrap_script_in_pkg), sudo=use_sudo)
-            lgr.debug('copying bootstrap script to package directory')
+            lgr.info('copying bootstrap script to package directory')
             common.cp(bootstrap_script_in_pkg, sources_path, sudo=use_sudo)
     lgr.info('packing up component: {0}'.format(name))
     # this checks if a package needs to be created. If no source package type
@@ -564,7 +564,7 @@ def pack(component):
                           before_install=None)
                     if dst_pkg_type == "tar.gz":
                         lgr.debug('converting tar to tar.gz...')
-                        do('sudo gzip {0}.tar*'.format(name))
+                        do('gzip {0}.tar*'.format(name), sudo=use_sudo)
                     lgr.info("isolating archives...")
                     common.mv('{0}/*.{1}'.format(
                         tmp_pkg_path, dst_pkg_type), package_path, use_sudo)
@@ -618,7 +618,7 @@ def do(command, attempts=2, sleep_time=3, accepted_err_codes=None,
         for execution in xrange(attempts):
             with settings(warn_only=True):
                 with hide('warnings'):
-                    x = local('sudo {0}'.format(command), capture) if sudo \
+                    x = local('sudo -E {0}'.format(command), capture) if sudo \
                         else local(command, capture)
                 if x.succeeded or x.return_code in accepted_err_codes:
                     lgr.debug('successfully executed: ' + command)
@@ -773,7 +773,7 @@ class fpmHandler(CommonHandler):
             else output_type
         self.input_type = input_type
         self.source = source
-        self.command = 'fpm -n {0} -s {1} -t {2} '
+        self.command = 'fpm --verbose -n {0} -s {1} -t {2} '
 
     def _build_fpm_cmd_string(self, **kwargs):
         """this will build a command string
@@ -803,6 +803,7 @@ class fpmHandler(CommonHandler):
     def fpm(self, **kwargs):
         """runs fpm
         """
+        print kwargs
         self._build_fpm_cmd_string(**kwargs)
         do(self.command, sudo=self.sudo)
 
@@ -856,11 +857,9 @@ class PythonHandler(CommonHandler):
          else, will use `dir` (for virtualenvs and such)
         """
         lgr.debug('downloading module {0}'.format(module))
-        return do('sudo {0}/pip install --no-use-wheel'
-                  ' --process-dependency-links --download "{1}/" {2}'
+        return do('{0}/pip install -d "{1}/" {2}'
                   .format(venv, dir, module)) \
-            if venv else do('sudo pip install --no-use-wheel'
-                            ' --process-dependency-links --download "{0}/" {1}'
+            if venv else do('pip install -d "{0}/" {1}'
                             .format(dir, module))
 
     def check_module_installed(self, name, dir=False):
@@ -961,7 +960,7 @@ class YumHandler(CommonHandler):
         """
         lgr.debug('downloading {0} to {1}'.format(package, dir))
 
-        return do('yumdownloader --destdir={1}/archives -v {0}'.format(package, dir),
+        return do('yumdownloader --resolve --destdir={1}/archives -v {0}'.format(package, dir),
                   accepted_err_codes=[1], sudo=sudo)
 
     def installs(self, packages):
@@ -995,11 +994,33 @@ class YumHandler(CommonHandler):
         """
         lgr.debug('adding source repository {0}'.format(source_repo))
         if os.path.splitext(source_repo)[1] == '.rpm':
-            return do('sudo rpm -ivh {0}'.format(
-                source_repo), accepted_err_codes=[1])
+            return do('rpm -ivh {0}'.format(
+                source_repo), accepted_err_codes=[1], sudo=True)
         else:
             dl = WgetHandler()
             dl.download(source_repo, dir='/etc/yum.repos.d/')
+
+    def remove_source_repos(self, source_repos):
+        """removes source repositories
+        :param list source_repos: source repositories
+        """
+        for source_repo in source_repos:
+            self.remove_src_repo(source_repo)
+
+    def remove_src_repo(self, source_repo):
+        """removes previously added source repo
+
+        :param source_repo:
+        """
+        lgr.debug('removing repository {0}'.format(source_repo))
+        if os.path.splitext(source_repo)[1] == '.rpm':
+            rpm_to_remove = source_repo.split('/')[-1].replace('.rpm', '')
+            return do('rpm -e {0}'.format(rpm_to_remove),
+                      accepted_err_codes=[1], sudo=True)
+        else:
+            repo_to_remove = source_repo.split('/')[-1]
+            return do('rm -rf /etc/yum.repos.d/{0}'.format(repo_to_remove),
+                      accepted_err_codes=[1], sudo=True)
 
     def add_keys(self, key_files):
         """adds a list of keys to the local repo
