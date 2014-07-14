@@ -805,6 +805,7 @@ class fpmHandler(CommonHandler):
         """
         print kwargs
         self._build_fpm_cmd_string(**kwargs)
+        print "Running in: {0}".format(os.getcwd())
         do(self.command, sudo=self.sudo)
 
 
