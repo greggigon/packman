@@ -831,10 +831,10 @@ class PythonHandler(CommonHandler):
         """
         lgr.debug('installing module {0}'.format(module))
         return do('{0}/bin/pip --default-timeout={2} install {1}'
-                  ' --process-dependency-links'.format(venv, module, timeout),
+                  ' --process-dependency-links --no-use-wheel'.format(venv, module, timeout),
                   attempts=attempts, sudo=sudo) \
             if venv else do('pip --default-timeout={2} install {1}'
-                            ' --process-dependency-links'.format(
+                            ' --process-dependency-links --no-use-wheel'.format(
                                 venv, module, timeout),
                             attempts=attempts, sudo=sudo)
 
@@ -858,9 +858,9 @@ class PythonHandler(CommonHandler):
          else, will use `dir` (for virtualenvs and such)
         """
         lgr.debug('downloading module {0}'.format(module))
-        return do('{0}/pip install -d "{1}/" {2}'
+        return do('{0}/pip install -d "{1}/" {2} --no-use-wheel'
                   .format(venv, dir, module)) \
-            if venv else do('pip install -d "{0}/" {1}'
+            if venv else do('pip install -d "{0}/" {1} --no-use-wheel'
                             .format(dir, module))
 
     def check_module_installed(self, name, dir=False):
@@ -1381,13 +1381,14 @@ class TemplateHandler(CommonHandler):
          when creating the file
         :rtype: generated template content
         """
+        lgr.debug("generating template for", template_file)
         if type(template_dir) is not str:
             raise PackagerError('template_dir must be of type string')
         if self.is_dir(template_dir):
             env = Environment(loader=FileSystemLoader(template_dir))
         else:
             lgr.error('template dir missing')
-            raise PackagerError('template dir missing')
+            raise PackagerError('template dir mising')
         if type(template_file) is not str:
             raise PackagerError('template_file must be of type string')
         if self.is_file(os.path.join(template_dir, template_file)):
